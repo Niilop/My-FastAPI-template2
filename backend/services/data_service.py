@@ -1,46 +1,72 @@
-# backend/services/data_service.py
-import pandas as pd
-import os
+import csv
+from pathlib import Path
+from typing import Any
+
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
-from models.database import DataCatalog
-from models.schemas import DataCatalogCreate
-import json
-from typing import List
+
+from backend.core.config import get_settings
+from backend.models.database import DataCatalog
+
+# The limit is process-wide; configure it once so concurrent uploads cannot change it.
+# A UTF-8 field cannot contain more characters than the upload's total byte count.
+csv.field_size_limit(get_settings().max_upload_bytes)
 
 
-def process_and_save_dataset(db: Session, user_id: int, file_path: str, name: str, description: str):
-    
-    # 1. Profile the data
-    df = pd.read_csv(file_path) # Assume CSV for now
-    
-    
-    metadata = {
-        "num_rows": int(df.shape[0]),
-        "num_cols": int(df.shape[1]),
-        "columns": list(df.columns),
-        "dtypes": {col: str(dtype) for col, dtype in df.dtypes.items()},
-        "missing_values": df.isnull().sum().to_dict(),
-        "summary_stats": df.describe(include='all').to_json()
+def profile_csv(file_path: Path) -> dict[str, Any]:
+    with file_path.open(encoding="utf-8-sig", newline="") as source:
+        reader = csv.reader(source, strict=True)
+        columns = next(reader, [])
+        if not columns or any(not column.strip() for column in columns):
+            raise ValueError("CSV must contain non-empty column names")
+        if len(set(columns)) != len(columns):
+            raise ValueError("CSV column names must be unique")
+        missing = dict.fromkeys(columns, 0)
+        rows = 0
+        for row in reader:
+            if len(row) != len(columns):
+                raise ValueError("Every CSV row must have the same number of columns as the header")
+            rows += 1
+            for column, value in zip(columns, row, strict=True):
+                if not value.strip():
+                    missing[column] += 1
+    return {
+        "num_rows": rows,
+        "num_cols": len(columns),
+        "columns": columns,
+        "missing_values": missing,
     }
 
-    # 2. Save to Database
-    db_catalog = DataCatalog(
+
+def process_and_save_dataset(
+    db: Session, user_id: int, file_path: Path, name: str, description: str
+) -> DataCatalog:
+    catalog = DataCatalog(
         user_id=user_id,
         name=name,
-        file_path=file_path,
+        file_path=str(file_path),
         description=description,
-        data_metadata=metadata
+        data_metadata=profile_csv(file_path),
     )
-    
-    db.add(db_catalog)
+    db.add(catalog)
     db.commit()
-    db.refresh(db_catalog)
-    return db_catalog
+    return catalog
 
-def get_user_datasets(db: Session, user_id: int) -> List[DataCatalog]:
-    """Retrieve all datasets uploaded by a specific user."""
-    return db.query(DataCatalog).filter(DataCatalog.user_id == user_id).all()
+
+def get_user_datasets(db: Session, user_id: int) -> list[DataCatalog]:
+    return list(
+        db.scalars(
+            select(DataCatalog)
+            .where(DataCatalog.user_id == user_id)
+            .order_by(DataCatalog.id.desc())
+        )
+    )
+
 
 def count_user_datasets(db: Session, user_id: int) -> int:
-    """Count the total number of datasets uploaded by a specific user."""
-    return db.query(DataCatalog).filter(DataCatalog.user_id == user_id).count()
+    return (
+        db.scalar(
+            select(func.count()).select_from(DataCatalog).where(DataCatalog.user_id == user_id)
+        )
+        or 0
+    )

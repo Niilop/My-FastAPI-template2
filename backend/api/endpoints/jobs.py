@@ -1,24 +1,24 @@
-# backend/api/endpoints/jobs.py
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from api.endpoints.auth import get_current_user
-from core.database import get_db
-from models.database import User
-from models.schemas import JobStatusResponse  # noqa: F401 (response_model uses string ref)
-from services.job_service import get_job
+from backend.api.endpoints.auth import get_current_user
+from backend.core.database import get_db
+from backend.models.database import User
+from backend.models.schemas import JobStatusResponse
+from backend.services.job_service import get_job
 
 router = APIRouter(prefix="/jobs", tags=["Jobs"])
 
 
 @router.get("/{job_id}", response_model=JobStatusResponse)
 def job_status(
-    job_id: str,
+    job_id: UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
-    """Poll the status of a background job. Returns result when completed or error when failed."""
-    job = get_job(db, job_id, current_user.id)
+) -> JobStatusResponse:
+    job = get_job(db, str(job_id), current_user.id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    return JobStatusResponse.from_orm_job(job)
+    return JobStatusResponse.model_validate(job)

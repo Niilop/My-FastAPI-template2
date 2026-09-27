@@ -1,14 +1,9 @@
 [project]
 name = "frontend"
-version = "0.1.0"
-description = "Streamlit UI for the LLM template"
-requires-python = ">=3.11"
-dependencies = [
-    "streamlit",
-    "requests",
-    "pydantic-settings",
-    "python-dotenv",
-]
+version = "0.2.0"
+description = "Optional API tester"
+requires-python = ">=3.12"
+dependencies = ["streamlit>=1.42,<2", "requests>=2.32,<3"]
 
 [tool.uv]
 package = false

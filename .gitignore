@@ -18,3 +18,11 @@ __pycache__/
 *$py.class
 .pytest_cache/
 app.db
+# Local configuration and generated files
+.env.*
+!.env.example
+.ruff_cache/
+.coverage
+htmlcov/
+data/uploads/
+*.db

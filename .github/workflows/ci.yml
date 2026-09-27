@@ -1,0 +1,42 @@
+name: Checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.12', '3.14']
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: test-password
+          POSTGRES_DB: template_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://postgres:test-password@localhost:5432/template_test
+      SECRET_KEY: ci-only-test-secret-with-at-least-32-bytes
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.12.11'
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+      - run: uv sync --all-packages --locked
+      - run: uv run --no-sync ruff check .
+      - run: uv run --no-sync ruff format --check .
+      - run: uv run --no-sync pytest
+      - run: uv run --no-sync alembic -c backend/alembic.ini upgrade head
+      - run: uv run --no-sync alembic -c backend/alembic.ini check
+      - run: uv run --no-sync alembic -c backend/alembic.ini downgrade base
+      - run: uv run --no-sync alembic -c backend/alembic.ini upgrade head

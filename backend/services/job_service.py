@@ -1,21 +1,19 @@
-# backend/services/job_service.py
-import uuid
-from datetime import datetime, timezone
-from typing import Callable, Any
+import logging
+from collections.abc import Callable
+from typing import Any
+from uuid import uuid4
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from core.database import SessionLocal
-from models.database import BackgroundJob, JobStatus
+from backend.core.database import SessionLocal
+from backend.models.database import BackgroundJob, JobStatus
+
+logger = logging.getLogger(__name__)
 
 
 def create_job(db: Session, user_id: int, job_type: str) -> BackgroundJob:
-    job = BackgroundJob(
-        id=str(uuid.uuid4()),
-        user_id=user_id,
-        job_type=job_type,
-        status=JobStatus.PENDING,
-    )
+    job = BackgroundJob(id=str(uuid4()), user_id=user_id, job_type=job_type)
     db.add(job)
     db.commit()
     db.refresh(job)
@@ -23,43 +21,26 @@ def create_job(db: Session, user_id: int, job_type: str) -> BackgroundJob:
 
 
 def get_job(db: Session, job_id: str, user_id: int) -> BackgroundJob | None:
-    return (
-        db.query(BackgroundJob)
-        .filter(BackgroundJob.id == job_id, BackgroundJob.user_id == user_id)
-        .first()
+    return db.scalar(
+        select(BackgroundJob).where(BackgroundJob.id == job_id, BackgroundJob.user_id == user_id)
     )
 
 
-def run_job(job_id: str, task: Callable[[Session], Any]) -> None:
-    """
-    Executes *task(db)* in a background thread with its own DB session.
-    The task receives the session so it can do DB work without reusing
-    the closed request-scoped session.
-    Updates the job row to running → completed/failed.
-    """
-    db: Session = SessionLocal()
-    try:
-        job = db.query(BackgroundJob).filter(BackgroundJob.id == job_id).first()
+def run_job(job_id: str, task: Callable[[Session], dict[str, Any]]) -> None:
+    """Run a short in-process task with its own database session."""
+    with SessionLocal() as db:
+        job = db.get(BackgroundJob, job_id)
         if job is None:
             return
-
-        job.status = JobStatus.RUNNING
-        job.updated_at = datetime.now(timezone.utc)
-        db.commit()
-
-        result = task(db)
-
-        job.status = JobStatus.COMPLETED
-        job.result = result
-        job.updated_at = datetime.now(timezone.utc)
-        db.commit()
-    except Exception as exc:
-        db.rollback()
-        job = db.query(BackgroundJob).filter(BackgroundJob.id == job_id).first()
-        if job:
-            job.status = JobStatus.FAILED
-            job.error = str(exc)
-            job.updated_at = datetime.now(timezone.utc)
+        try:
+            job.status = JobStatus.RUNNING
             db.commit()
-    finally:
-        db.close()
+            job.result = task(db)
+            job.status = JobStatus.COMPLETED
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.exception("Background job %s failed", job_id)
+            job.status = JobStatus.FAILED
+            job.error = "Task failed"
+            db.commit()
