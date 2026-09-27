@@ -1,8 +1,8 @@
 # 001 — Final template development and CI polish
 
-- Status: active
+- Status: complete
 - Updated: 2026-09-27
-- Branch: `chore/template-finalization`
+- Branch / PR: `chore/template-finalization`, [PR #5](https://github.com/Niilop/My-FastAPI-template2/pull/5)
 
 ## Goal
 
@@ -22,7 +22,7 @@ Make a fresh template copy easy to start, exercise the real application in CI, a
 - [x] Setup creates a secret for a new `.env` and never overwrites an existing one.
 - [x] Development command starts both servers, reports missing setup, and stops both on interruption or child failure.
 - [x] Make exposes documented migration and validation commands.
-- [ ] Full-stack smoke passes locally and in CI, using disposable data and preserving failure evidence.
+- [x] Full-stack smoke passes locally and in CI, using disposable data and preserving failure evidence.
 - [x] Smoke resources are cleaned up after success and failure.
 - [x] Dependency update configuration covers the manifests and groups routine updates without automatic merging.
 - [x] Documentation and existing checks pass.
@@ -33,7 +33,7 @@ Make a fresh template copy easy to start, exercise the real application in CI, a
 - [x] Add command helpers and focused checks for their failure cases.
 - [x] Add isolated smoke stack, browser scenario, and CI job.
 - [x] Add dependency maintenance configuration.
-- [ ] Validate and update docs, decisions, and status; open one PR.
+- [x] Validate and update docs, decisions, and status; open one PR.
 
 ## Validation results
 
@@ -46,8 +46,9 @@ Make a fresh template copy easy to start, exercise the real application in CI, a
 | Smoke cleanup | No test containers/networks left after a failed run or successful run |
 | Fresh copy in `/tmp` with disposable PostgreSQL | Setup and existing-env preservation pass; migration preflight rejects an unmigrated DB; `make migrate` succeeds; both servers/proxy and Ctrl+C cleanup pass on alternate ports |
 | Compose and YAML syntax | Pass |
-| GitHub CI | Pending PR |
+| GitHub CI | Backend on Python 3.12/3.14, frontend, and full-stack smoke pass on implementation commit `9bc93ee`; [run](https://github.com/Niilop/My-FastAPI-template2/actions/runs/36329427110) |
+| Documentation | 53 local links/anchors and whitespace checks pass |
 
 ## Handoff
 
-Implementation is ready for PR validation. No schema changes or runtime dependencies were added. Custom development ports allow several copied projects to run without changing source files. An artifact mount permission issue found in the first smoke run was corrected before the passing run. Next step: confirm CI on the PR.
+Implementation and validation are complete; PR #5 is ready for user review and merge. No schema changes or runtime dependencies were added. Custom development ports allow several copied projects to run without changing source files. An artifact mount permission issue found in the first smoke run was corrected before the passing run. After merging, use the template initialization checklist for the next project; no implementation work remains in this plan.
