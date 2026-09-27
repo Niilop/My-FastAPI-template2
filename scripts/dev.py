@@ -12,6 +12,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def check_port(port: int) -> None:
+    with socket.socket() as probe:
+        # Match Uvicorn: TIME_WAIT connections must not block a server restart.
+        probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            probe.bind(("127.0.0.1", port))
+        except OSError as exc:
+            raise RuntimeError(f"Port {port} is already in use. Stop that server first.") from exc
+
+
 def preflight(backend_port: int, frontend_port: int) -> None:
     from alembic.config import Config
     from alembic.runtime.migration import MigrationContext
@@ -25,13 +35,7 @@ def preflight(backend_port: int, frontend_port: int) -> None:
     if backend_port == frontend_port:
         raise RuntimeError("Backend and frontend need different ports.")
     for port in (backend_port, frontend_port):
-        with socket.socket() as probe:
-            try:
-                probe.bind(("127.0.0.1", port))
-            except OSError as exc:
-                raise RuntimeError(
-                    f"Port {port} is already in use. Stop that server first."
-                ) from exc
+        check_port(port)
     try:
         settings = get_settings()
     except ValueError as exc:

@@ -39,7 +39,8 @@ Make a fresh template copy easy to start, exercise the real application in CI, a
 
 | Check | Result |
 | --- | --- |
-| `make check-backend` | 44 tests pass; Ruff lint and formatting pass |
+| `make check-backend` | 46 tests pass after the port-restart review fix; Ruff lint and formatting pass |
+| Port-restart regression | Real-socket test reproduced failure before the fix; restart after TIME_WAIT and rejection of active listeners both pass with address reuse |
 | Frontend lint, formatting, production build | Pass |
 | Existing desktop/mobile browser suite in Docker | 14 tests pass |
 | `make smoke` | Real registration, login, persistence, CRUD, and cross-user isolation pass |

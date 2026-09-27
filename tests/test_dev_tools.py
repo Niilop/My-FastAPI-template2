@@ -1,11 +1,40 @@
 import os
 import signal
+import socket
 import subprocess
 import sys
 import time
 from pathlib import Path
 
+import pytest
+
+from scripts.dev import check_port
 from scripts.setup_env import initialize_env
+
+
+def test_port_check_allows_restart_after_connection_closes() -> None:
+    with socket.socket() as server:
+        server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server.bind(("127.0.0.1", 0))
+        server.listen()
+        server.settimeout(2)
+        port = server.getsockname()[1]
+        with socket.create_connection(("127.0.0.1", port), timeout=2) as client:
+            connection, _ = server.accept()
+            # Close the server side first so its port enters TIME_WAIT.
+            connection.close()
+            assert client.recv(1) == b""
+    check_port(port)
+
+
+def test_port_check_rejects_active_listener() -> None:
+    with socket.socket() as server:
+        server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server.bind(("127.0.0.1", 0))
+        server.listen()
+        port = server.getsockname()[1]
+        with pytest.raises(RuntimeError, match=f"Port {port} is already in use"):
+            check_port(port)
 
 
 def test_setup_creates_private_env_and_preserves_existing(tmp_path: Path) -> None:
