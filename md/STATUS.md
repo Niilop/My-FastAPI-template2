@@ -6,7 +6,7 @@ The repository is a generic FastAPI/React template with authentication, private-
 
 ## Active work
 
-No active implementation plan. Future plans belong in [plans/](plans/README.md); link active ones here with their status.
+Active: [001 — Template finalization](plans/001-template-finalization.md), covering development commands, full-stack CI, and dependency updates. Branch: `chore/template-finalization`.
 
 ## Blockers and open questions
 

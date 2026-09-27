@@ -1,0 +1,66 @@
+# A standalone disposable test stack. Never combines with docker-compose.yaml or .env.
+services:
+  database:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: smoke
+      POSTGRES_PASSWORD: smoke-test-only
+      POSTGRES_DB: smoke
+    tmpfs:
+      - /var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smoke -d smoke"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://smoke:smoke-test-only@database:5432/smoke
+      SECRET_KEY: disposable-smoke-test-secret-at-least-32-bytes
+      FORWARDED_ALLOW_IPS: "*"
+    # This migration-on-start command is only for the disposable smoke database.
+    command: ["sh", "-c", "alembic -c backend/alembic.ini upgrade head && exec uvicorn backend.main:app --host 0.0.0.0 --port 8000"]
+    depends_on:
+      database:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3)"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    environment:
+      API_UPSTREAM: http://backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:8080/api/ready"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  smoke:
+    build:
+      context: .
+      dockerfile: frontend/e2e/Dockerfile
+    environment:
+      HOME: /tmp
+      CI: "true"
+      E2E_BASE_URL: http://frontend:8080
+      E2E_OUTPUT_DIR: /artifacts/results
+    init: true
+    shm_size: 1gb
+    volumes:
+      - ./frontend/test-results/smoke:/artifacts
+    depends_on:
+      frontend:
+        condition: service_healthy

@@ -23,6 +23,15 @@ Record choices that future maintainers would otherwise have to rediscover: bound
 - Reason: show task submission and status lookup without requiring queue infrastructure in every copied project.
 - Consequence: task execution is not durable. Long-running analysis or ingestion that needs retries and recovery requires a separate worker design.
 
+## D004 — Isolate full-stack tests from development data
+
+- Status: accepted.
+- Date: 2026-09-27.
+- Decision: run the same `make smoke` target locally and in CI, with production app images and a separate Compose file, network, and temporary PostgreSQL data.
+- Reason: exercise the actual proxy, API contract, and persistence without relying on or mutating a developer's database. No host ports or local `.env` are used.
+- Consequences: smoke tests require Docker and build a browser runner; initial runs are slower than mocked UI tests. Browser installation follows the locked Playwright version rather than a separately versioned browser image. Normal application migrations remain explicit.
+- Reference: [finalization plan](plans/001-template-finalization.md).
+
 ## Adding a decision
 
 Copy this outline, assign the next ID, and link it from a related plan when useful:

@@ -4,7 +4,7 @@ React, TypeScript, Vite, React Router, and plain CSS. Node 24 and npm are requir
 
 ## Development
 
-Start the FastAPI backend on port 8000, then run:
+From the repository root, `make setup`, configure `.env`, `make migrate`, then `make dev` starts both servers. To run the frontend separately, start the FastAPI backend on port 8000, then run:
 
 ```bash
 cd frontend
@@ -54,6 +54,8 @@ npm test
 ```
 
 Browser tests run in Chromium at desktop and mobile sizes. They intercept API requests, so PostgreSQL and the backend are not required. On Linux, Playwright may need system browser libraries; CI installs these using `npx playwright install --with-deps chromium`.
+
+The separate `make smoke` command (from the repository root) runs `e2e/smoke.spec.ts` against real Nginx, FastAPI, and disposable PostgreSQL containers. It installs browser libraries inside the test image, not on the host. See the [full-stack smoke guide](../README.md#full-stack-smoke-test). `npm run test:smoke` is the container runner's command; normal local checks remain `npm test`.
 
 Run `npm run format` to apply the shared Prettier formatting rules.
 

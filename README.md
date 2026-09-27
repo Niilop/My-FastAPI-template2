@@ -15,34 +15,46 @@ The [md/](md/README.md) folder contains the project context, implemented archite
 
 ## Local development
 
-Run commands from the repository root. Install [uv](https://docs.astral.sh/uv/getting-started/installation/) if needed, then:
+Use Linux, macOS, or WSL with GNU Make, [uv](https://docs.astral.sh/uv/getting-started/installation/), and Node 24/npm installed. From the repository root:
 
 ```bash
-uv sync --all-packages
-cp .env.example .env
-uv run --no-sync python -c "import secrets; print(secrets.token_urlsafe(48))"
+make setup
 ```
 
-Paste the generated value into `SECRET_KEY` in `.env`. Set `DATABASE_URL` to a **dedicated, empty database** in your PostgreSQL instance (for example, in `~/code/devstack`). PostgreSQL extensions and Redis are not required. The repository does not start another database server.
+This installs locked Python/frontend dependencies and creates `.env` with a generated secret if it does not exist. Existing `.env` files are preserved. Set `DATABASE_URL` to a **dedicated, empty database** in your PostgreSQL instance (for example, in `~/code/devstack`). PostgreSQL extensions and Redis are not required. Normal development does not start another database server.
 
 ```bash
+make migrate
+make dev
+```
+
+`make dev` checks the settings, database migration revision, and ports, then starts both servers. Ctrl+C or either server exiting stops both. It points Vite at the local backend even if `frontend/.env.local` specifies a different proxy; use the separate commands below when working with a remote API. It never applies migrations automatically.
+
+Open <http://localhost:5173> for the UI and <http://127.0.0.1:8000/docs> for the API. Registration requires a password of 12–128 characters and a username of 3–100 letters, digits, dots, underscores, or hyphens. Login uses form fields `username` and `password`; `username` can contain either the username or email.
+
+If another project uses the default ports, run `make dev BACKEND_PORT=18000 FRONTEND_PORT=15173`; the proxy follows the backend port. To run servers separately, use `make backend` and `make frontend` in separate terminals. All commands are listed by `make help`:
+
+| Command | Purpose |
+| --- | --- |
+| `make setup` | Install locked dependencies and safely initialize `.env` |
+| `make dev` | Start and stop both local servers together |
+| `make migrate` | Apply migrations to the configured database |
+| `make check` | Backend checks plus frontend lint, formatting, build, and mocked browser tests |
+| `make check-backend` / `make check-frontend` | Run checks for one side |
+| `make smoke` | Test the real full stack in disposable Docker containers |
+
+Without Make, the underlying commands are:
+
+```bash
+uv sync --all-packages --locked
+uv run --no-sync python -m scripts.setup_env
+npm --prefix frontend ci
+# Configure DATABASE_URL in .env before migrating:
 uv run --no-sync alembic -c backend/alembic.ini upgrade head
-uv run --no-sync uvicorn backend.main:app --reload
+uv run --no-sync python -m scripts.dev
 ```
 
-Open <http://127.0.0.1:8000/docs> to try the API. Registration requires a password of 12–128 characters and a username of 3–100 letters, digits, dots, underscores, or hyphens. Login uses form fields `username` and `password`; `username` can contain either the username or email.
-
-To install only backend dependencies, use `uv sync --package backend`. Use `uv sync --all-packages` to include the Python development tools.
-
-Start the frontend in another terminal:
-
-```bash
-cd frontend
-npm ci
-npm run dev
-```
-
-Open <http://localhost:5173>. Vite forwards `/api/*` requests to the backend on port 8000, so no CORS change is needed. The UI includes registration/login, protected account and items pages, create/edit/delete forms, and the example endpoint. Tokens stay in memory; reloading the page signs you out. See [frontend/README.md](frontend/README.md) for configuration, structure, and browser tests.
+To install only backend dependencies, use `uv sync --package backend`. Vite forwards `/api/*` requests to the backend on port 8000, so no CORS change is needed. The UI includes registration/login, protected account and items pages, create/edit/delete forms, and the example endpoint. Tokens stay in memory; reloading the page signs you out. See [frontend/README.md](frontend/README.md) for configuration, structure, and browser tests.
 
 ## Configuration
 
@@ -110,6 +122,8 @@ backend/
   main.py          App factory and health endpoints
 frontend/src/      React pages, routing, session state, and API client
 frontend/tests/    Desktop and mobile browser tests
+frontend/e2e/      Real full-stack smoke test and browser runner image
+scripts/           Setup, development server, and smoke-test helpers
 tests/             Isolated automated tests and REST client examples
 ```
 
@@ -145,5 +159,19 @@ npm run build
 npx playwright install chromium
 npm test
 ```
+
+### Full-stack smoke test
+
+Run `make smoke` from the root with Docker Engine and Compose v2 available. It builds the production backend/frontend plus a browser runner, starts a separate PostgreSQL 18 database, applies migrations, and tests registration, login, persistence across reload, item CRUD, and cross-user isolation through Nginx. There are no mocked API calls.
+
+The standalone [compose.smoke.yaml](compose.smoke.yaml) publishes no host ports, reads no `.env`, and uses a unique Compose project per run. Database files live in container tmpfs. The script removes its containers, network, and volumes on success, failure, or interruption. It does not use or stop your development stack. Docker build cache/images are retained for later runs. Run one smoke command at a time per checkout because the artifact directory is shared.
+
+Browser failure traces/screenshots and container logs are saved under `frontend/test-results/smoke/` (ignored by Git). CI runs the same Make target and uploads that directory on failure. No host Python, npm, or browser installation is required for this target. The test runner installs Chromium matching the locked Playwright dependency inside its image.
+
+### Dependency maintenance
+
+[Dependabot configuration](.github/dependabot.yml) schedules weekly updates for the uv workspace, frontend npm packages, GitHub Actions, Dockerfiles, and Compose images. Minor/patch version updates are grouped per ecosystem; major versions remain separate PRs. Python/npm security updates have separate groups when security updates are enabled in the repository settings. No updates are merged automatically.
+
+Review dependency PRs and their CI results, especially framework, runtime, and database major versions. The smoke check rebuilds the images and uses the browser version from the lockfile. Update the documented runtime requirements when accepting runtime-version changes. See [GitHub's configuration reference](https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference) for the grouping options.
 
 Authentication follows the libraries used in [FastAPI's security guide](https://fastapi.tiangolo.com/tutorial/security/oauth2-jwt/); container dependency installation follows [uv's Docker guide](https://docs.astral.sh/uv/guides/integration/docker/).
