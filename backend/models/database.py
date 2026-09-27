@@ -27,24 +27,20 @@ class User(Timestamps, Base):
     username: Mapped[str] = mapped_column(String(100), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
     settings: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
-    data_catalogs: Mapped[list["DataCatalog"]] = relationship(
-        back_populates="owner", cascade="all, delete-orphan"
-    )
+    items: Mapped[list["Item"]] = relationship(back_populates="owner", cascade="all, delete-orphan")
     background_jobs: Mapped[list["BackgroundJob"]] = relationship(
         back_populates="owner", cascade="all, delete-orphan"
     )
 
 
-class DataCatalog(Timestamps, Base):
-    __tablename__ = "data_catalogs"
+class Item(Timestamps, Base):
+    __tablename__ = "items"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
-    name: Mapped[str] = mapped_column(String(255))
-    file_path: Mapped[str] = mapped_column(String(500))
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    title: Mapped[str] = mapped_column(String(255))
     description: Mapped[str] = mapped_column(Text, default="")
-    data_metadata: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
-    owner: Mapped[User] = relationship(back_populates="data_catalogs")
+    owner: Mapped[User] = relationship(back_populates="items")
 
 
 class JobStatus(StrEnum):

@@ -36,7 +36,7 @@ export function OverviewPage() {
       <div className="page-heading">
         <p className="eyebrow">Your workspace</p>
         <h1>{session ? `Welcome, ${session.user.username}.` : 'A place to start.'}</h1>
-        <p>Manage your account, upload a dataset, or try a simple request.</p>
+        <p>Manage your account, save an item, or try a simple request.</p>
       </div>
       <div className="overview-grid">
         <section className="panel">
@@ -74,19 +74,18 @@ export function OverviewPage() {
         </section>
         <aside className="overview-aside">
           <p className="eyebrow">Start here</p>
-          <h2>Bring your own data.</h2>
+          <h2>Save something useful.</h2>
           <p>
-            Upload a CSV and see its columns, row count, and missing values. Your datasets belong to
-            your account.
+            Keep a note or an idea with a title and description. You can edit or delete it later.
           </p>
-          <Link className="text-link" to="/datasets">
-            Open datasets <span aria-hidden="true">→</span>
+          <Link className="text-link" to="/items">
+            Open items <span aria-hidden="true">→</span>
           </Link>
           <hr />
           <p className="muted">
             {session
               ? 'Your account is ready. Build your next feature from here.'
-              : 'New here? Create an account to save your first dataset.'}
+              : 'New here? Create an account to save your first item.'}
           </p>
           {!session && (
             <Link className="text-link" to="/register">

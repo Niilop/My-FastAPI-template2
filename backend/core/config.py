@@ -16,9 +16,6 @@ class Settings(BaseSettings):
     secret_key: SecretStr
     access_token_expire_minutes: int = Field(default=30, ge=1)
     cors_origins: Annotated[list[str], NoDecode] = Field(default_factory=list)
-    data_dir: Path = REPO_ROOT / "data"
-    max_upload_bytes: int = Field(default=10 * 1024 * 1024, ge=1)
-    max_datasets_per_user: int = Field(default=10, ge=1)
 
     model_config = SettingsConfigDict(
         env_file=REPO_ROOT / ".env", env_file_encoding="utf-8", extra="ignore"

@@ -1,11 +1,11 @@
 # FastAPI Template
 
-A FastAPI backend with PostgreSQL, authentication, file uploads, and a React + TypeScript frontend. Python 3.12+ dependencies use uv; the frontend uses Node 24 and npm.
+A FastAPI backend with PostgreSQL, authentication, a small CRUD example, and a React + TypeScript frontend. Python 3.12+ dependencies use uv; the frontend uses Node 24 and npm.
 
 - Registration and login by email or username, Argon2 password hashing, expiring JWTs.
 - SQLAlchemy models and Alembic migrations.
-- Per-user CSV catalog with bounded uploads and generated filenames.
-- Rate limits on registration, login, uploads, and background job submission.
+- User-owned items with a title, description, timestamps, and paginated CRUD endpoints.
+- Rate limits on registration, login, item writes, and background job submission.
 - A route/service example and an in-process background job example.
 - Liveness and database readiness endpoints, configurable CORS, automated tests.
 
@@ -38,7 +38,7 @@ npm ci
 npm run dev
 ```
 
-Open <http://localhost:5173>. Vite forwards `/api/*` requests to the backend on port 8000, so no CORS change is needed. The UI includes registration/login, protected account and dataset pages, CSV uploads/catalog browsing, and the example endpoint. Tokens stay in memory; reloading the page signs you out. See [frontend/README.md](frontend/README.md) for configuration, structure, and browser tests.
+Open <http://localhost:5173>. Vite forwards `/api/*` requests to the backend on port 8000, so no CORS change is needed. The UI includes registration/login, protected account and items pages, create/edit/delete forms, and the example endpoint. Tokens stay in memory; reloading the page signs you out. See [frontend/README.md](frontend/README.md) for configuration, structure, and browser tests.
 
 ## Configuration
 
@@ -51,15 +51,12 @@ The backend reads the repository-root `.env` regardless of the working directory
 | `DEBUG` | `false` |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | `30` |
 | `CORS_ORIGINS` | Empty; explicit comma-separated URLs or a JSON array |
-| `DATA_DIR` | Repository `data/` directory |
-| `MAX_UPLOAD_BYTES` | `10485760` (10 MiB) |
-| `MAX_DATASETS_PER_USER` | `10` |
 
 JWT signing uses HS256. Keep `.env` out of Git. Existing `postgresql://` URLs are normalized to use psycopg 3. URL-encode special characters in database credentials.
 
 ## Docker
 
-The backend installs from `uv.lock`; the frontend builds from `frontend/package-lock.json` and is served by unprivileged Nginx. Compose runs the backend; the UI is an optional profile. Uploaded files live in a named volume.
+The backend installs from `uv.lock`; the frontend builds from `frontend/package-lock.json` and is served by unprivileged Nginx. Compose runs the backend; the UI is an optional profile. Application data lives in PostgreSQL.
 
 Set `.env`'s `DATABASE_URL` to an address reachable **from the container**. For a host-published devstack database, use `host.docker.internal` instead of `localhost` (the host-gateway mapping is included). Ensure that PostgreSQL's published port is reachable from that Docker network. Alternatively, attach the backend to your devstack network and use its database service hostname.
 
@@ -83,15 +80,19 @@ Migrations are an explicit deployment step. Run them once before starting new ap
 | POST | `/example/` | Public route/service example |
 | POST | `/example/async` | Authenticated background example (202) |
 | GET | `/jobs/{job_id}` | Current user's job status/result |
-| POST | `/data/upload` | Upload UTF-8 CSV as multipart `file`, `name`, optional `description` (201) |
-| GET | `/data/catalog` | Current user's datasets |
-| GET | `/data/count` | Dataset quota usage |
+| POST | `/items` | Create an item (201) |
+| GET | `/items` | Current user's items and total count; `limit` (1–100, default 20), `offset` (default 0) |
+| GET | `/items/{item_id}` | Read an owned item |
+| PUT | `/items/{item_id}` | Replace an owned item's title and description |
+| DELETE | `/items/{item_id}` | Delete an owned item (204) |
 | GET | `/health` | Process liveness |
 | GET | `/ready` | Database connectivity (503 on failure) |
 
-`GET /data/` remains an alias for the catalog. CSV metadata includes row count, column count, column names, and empty-value counts. Files must have unique nonempty headers and consistent row widths. Server filesystem paths are excluded from API responses.
+Item writes accept JSON with `title` (1–255 characters after trimming) and optional `description` (up to 5,000 characters, default empty). `PUT` replaces both fields; omitting `description` clears it. The server assigns the owner from the signed-in user; clients cannot supply or change it. Missing items and other users' items both return 404. Lists return `{ "items": [...], "total": 0 }`, ordered by newest ID first.
 
-Background jobs use FastAPI's in-process tasks and a separate database session. They are suitable for short tasks; process termination can leave jobs pending or running. Add a durable queue when your application needs retries or recovery. Rate limits use process-local memory; configure shared storage before deploying multiple workers. Put request-body limits at your reverse proxy as well: upload limits are enforced after multipart parsing and while copying the file. `/ready` checks database connectivity, not migration status.
+Background jobs use FastAPI's in-process tasks and a separate database session. They are suitable for short tasks; process termination can leave jobs pending or running. Add a durable queue when your application needs retries or recovery. Rate limits use process-local memory; configure shared storage before deploying multiple workers. The included Nginx proxy limits request bodies to 1 MiB. `/ready` checks database connectivity, not migration status.
+
+Items demonstrate private data ownership, not a universal data model. Rename and extend the example for notes, saved collections, or planned sets. Shared data (such as an admin-ingested music catalog) should have its own models and write permissions; users can reference shared records from their private collections. File storage and expensive analysis belong in separate features when needed.
 
 ## Project layout
 
@@ -100,7 +101,7 @@ backend/
   api/endpoints/    HTTP routes and dependencies
   core/            Settings, database sessions, rate limiting
   models/          ORM models and request/response schemas
-  services/        Authentication, CSV processing, background jobs
+  services/        Authentication, item CRUD, background jobs
   alembic/         Schema migrations
   main.py          App factory and health endpoints
 frontend/src/      React pages, routing, session state, and API client
@@ -117,7 +118,9 @@ uv run --no-sync alembic -c backend/alembic.ini upgrade head
 
 Review generated migrations before applying them.
 
-**Migration compatibility:** this cleanup replaces the old migration history with `0001_core`, intended for new databases. Do not apply or stamp it over an existing installation. Existing data needs a separate, reviewed migration/export plan; previous password hashes and tokens are not compatible with the new authentication setup. No existing database is modified by checking out these changes.
+**Upgrading from the CSV template:** run `alembic upgrade head` using the command above. Migration `0002_items` converts existing catalog entries to items, preserving IDs, owners, names as titles, descriptions, and timestamps. It drops stored file paths and CSV profiling metadata. Back up those fields first if needed; downgrading recreates them with empty values. Existing files and Docker upload volumes are left untouched, but the app no longer uses them. Remove obsolete `DATA_DIR`, `MAX_UPLOAD_BYTES`, `MAX_DATASETS_PER_USER`, and `CLIENT_MAX_BODY_SIZE` settings from local configuration.
+
+**Older migration compatibility:** `0001_core` replaced the original pre-cleanup migration history. Do not apply or stamp that baseline over an installation from before the cleanup. Those databases need a separate migration/export plan; their password hashes and tokens are not compatible with the current authentication setup. Checking out these changes does not modify any existing database.
 
 ## Checks
 
@@ -128,7 +131,7 @@ uv run --no-sync ruff format --check .
 uv run --no-sync pytest
 ```
 
-Backend tests use isolated SQLite databases and temporary upload directories, with no running API or external services. CI also checks migration upgrade, schema consistency, and downgrade on PostgreSQL. The frontend has separate build, lint, and browser checks:
+Backend tests use isolated SQLite databases, with no running API or external services. They cover ownership, validation, pagination, and migration data preservation. CI also checks migration upgrade, schema consistency, and downgrade on PostgreSQL. The frontend has separate build, lint, and browser checks:
 
 ```bash
 cd frontend

@@ -20,7 +20,7 @@ export function Layout() {
             <NavLink to="/" end>
               Overview
             </NavLink>
-            <NavLink to="/datasets">Datasets</NavLink>
+            <NavLink to="/items">Items</NavLink>
             {session && <NavLink to="/account">Account</NavLink>}
           </nav>
           <div className="session-actions">

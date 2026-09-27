@@ -3,7 +3,7 @@ import { RequireAuth } from './auth/RequireAuth'
 import { Layout } from './components/Layout'
 import { AccountPage } from './pages/AccountPage'
 import { AuthPage } from './pages/AuthPage'
-import { DatasetsPage } from './pages/DatasetsPage'
+import { ItemsPage } from './pages/ItemsPage'
 import { OverviewPage } from './pages/OverviewPage'
 
 export function App() {
@@ -15,7 +15,7 @@ export function App() {
         <Route path="register" element={<AuthPage key="register" register />} />
         <Route element={<RequireAuth />}>
           <Route path="account" element={<AccountPage />} />
-          <Route path="datasets" element={<DatasetsPage />} />
+          <Route path="items" element={<ItemsPage />} />
         </Route>
         <Route
           path="*"

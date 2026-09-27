@@ -6,7 +6,7 @@ COPY pyproject.toml uv.lock ./
 COPY backend/pyproject.toml backend/pyproject.toml
 RUN uv sync --locked --no-dev --package backend
 COPY backend backend
-RUN useradd --create-home app && mkdir -p /app/data && chown app:app /app/data
+RUN useradd --create-home app
 USER app
 ENV PATH="/app/.venv/bin:$PATH"
 EXPOSE 8000

@@ -28,7 +28,8 @@ a {
   text-underline-offset: 4px;
 }
 button,
-input {
+input,
+textarea {
   font: inherit;
 }
 button,
@@ -192,7 +193,8 @@ label {
   font-weight: 600;
   margin: 1rem 0 0.4rem;
 }
-input {
+input,
+textarea {
   width: 100%;
   min-height: 44px;
   border: 1px solid #bdc9c1;
@@ -201,18 +203,8 @@ input {
   border-radius: 5px;
   padding: 0.6rem 0.75rem;
 }
-input[type='file'] {
-  padding: 0.5rem;
-  font-size: 0.85rem;
-}
-input::file-selector-button {
-  border: 0;
-  border-radius: 3px;
-  padding: 0.3rem 0.5rem;
-  margin-right: 0.6rem;
-  background: #edf1ed;
-  color: var(--accent);
-  cursor: pointer;
+textarea {
+  resize: vertical;
 }
 form > button {
   margin-top: 1.5rem;
@@ -281,11 +273,6 @@ hr {
   text-align: center;
   font-size: 0.9rem;
 }
-.form-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1.25rem;
-}
 .form-actions {
   display: flex;
   align-items: center;
@@ -294,7 +281,7 @@ hr {
   margin-top: 1.5rem;
   font-size: 0.875rem;
 }
-.catalog {
+.item-list {
   margin-top: 2.5rem;
 }
 .section-heading {
@@ -353,16 +340,11 @@ td:first-child {
   color: var(--muted);
   margin-top: 0.25rem;
 }
-details {
-  margin-top: 0.5rem;
-  font-size: 0.8rem;
-}
-summary {
-  color: var(--accent);
-  cursor: pointer;
-}
-details ul {
-  padding-left: 1rem;
+.item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
 }
 dl {
   margin: 0;
@@ -419,10 +401,6 @@ dd {
   }
   .panel {
     padding: 1.5rem;
-  }
-  .form-grid {
-    grid-template-columns: 1fr;
-    gap: 0;
   }
   dl > div {
     grid-template-columns: 1fr;

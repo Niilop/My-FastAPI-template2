@@ -10,7 +10,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from backend.api.endpoints import auth, data, example, jobs
+from backend.api.endpoints import auth, example, items, jobs
 from backend.core.config import get_settings
 from backend.core.database import engine, get_db
 from backend.core.rate_limit import limiter
@@ -36,7 +36,7 @@ def create_app() -> FastAPI:
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
         allow_headers=["Authorization", "Content-Type"],
     )
-    for router in (auth.router, example.router, data.router, jobs.router):
+    for router in (auth.router, example.router, items.router, jobs.router):
         app.include_router(router)
     app.add_api_route("/", root, methods=["GET"])
     app.add_api_route("/health", health, methods=["GET"], tags=["Health"])

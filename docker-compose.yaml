@@ -7,13 +7,10 @@ services:
       - "127.0.0.1:8000:8000"
     env_file: .env
     environment:
-      DATA_DIR: /app/data
       # Backend ports are loopback-only; the frontend overwrites forwarded headers.
       FORWARDED_ALLOW_IPS: "*"
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    volumes:
-      - uploads:/app/data
     healthcheck:
       test: ["CMD", "uv", "run", "--no-sync", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3)"]
       interval: 10s
@@ -30,10 +27,6 @@ services:
       - "127.0.0.1:5173:8080"
     environment:
       API_UPSTREAM: http://backend:8000
-      CLIENT_MAX_BODY_SIZE: ${CLIENT_MAX_BODY_SIZE:-11m}
     depends_on:
       backend:
         condition: service_healthy
-
-volumes:
-  uploads:
