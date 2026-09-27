@@ -1,5 +1,6 @@
 @baseUrl = http://127.0.0.1:8000
 @token = paste-token-here
+@itemId = 1
 
 ### Register
 POST {{baseUrl}}/auth/register
@@ -30,8 +31,30 @@ Content-Type: application/json
 
 {"name": "Developer", "task": "Test a background job"}
 
-### Datasets
-GET {{baseUrl}}/data/catalog
+### Create an item (use the returned ID below)
+POST {{baseUrl}}/items
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"title": "An idea", "description": "A few details"}
+
+### List your items
+GET {{baseUrl}}/items?limit=20&offset=0
+Authorization: Bearer {{token}}
+
+### Read an item
+GET {{baseUrl}}/items/{{itemId}}
+Authorization: Bearer {{token}}
+
+### Replace an item
+PUT {{baseUrl}}/items/{{itemId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"title": "Updated idea", "description": ""}
+
+### Delete an item
+DELETE {{baseUrl}}/items/{{itemId}}
 Authorization: Bearer {{token}}
 
 ### Liveness

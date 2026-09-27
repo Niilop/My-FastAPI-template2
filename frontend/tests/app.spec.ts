@@ -8,26 +8,23 @@ const user = {
   created_at: '2026-01-01T12:00:00Z',
   settings: {},
 }
-const dataset = {
+const item = {
   id: 1,
-  name: 'Sales',
-  description: 'Monthly totals',
+  owner_id: 1,
+  title: 'First idea',
+  description: 'Some details',
   created_at: '2026-01-01T12:00:00Z',
   updated_at: '2026-01-01T12:00:00Z',
-  data_metadata: {
-    num_rows: 2,
-    num_cols: 2,
-    columns: ['month', 'total'],
-    missing_values: { month: 0, total: 0 },
-  },
 }
 
 async function mockApi(page: Page) {
-  let uploaded = false
+  let items: (typeof item)[] = []
   await page.route(
     (url) => url.pathname.startsWith('/api/'),
     async (route) => {
-      const path = new URL(route.request().url()).pathname
+      const url = new URL(route.request().url())
+      const path = url.pathname
+      const method = route.request().method()
       if (path === '/api/auth/login') {
         expect(route.request().postData()).toContain('username=tester')
         await route.fulfill({ json: { access_token: 'test-token', token_type: 'bearer' } })
@@ -46,19 +43,24 @@ async function mockApi(page: Page) {
       } else {
         expect(route.request().headers().authorization).toBe('Bearer test-token')
         if (path === '/api/auth/me') await route.fulfill({ json: user })
-        else if (path === '/api/data/catalog')
-          await route.fulfill({ json: uploaded ? [dataset] : [] })
-        else if (path === '/api/data/count')
+        else if (path === '/api/items' && method === 'GET') {
+          const offset = Number(url.searchParams.get('offset'))
+          const limit = Number(url.searchParams.get('limit'))
           await route.fulfill({
-            json: { count: uploaded ? 1 : 0, limit: 10, remaining: uploaded ? 9 : 10 },
+            json: { items: items.slice(offset, offset + limit), total: items.length },
           })
-        else if (path === '/api/data/upload') {
-          expect(route.request().headers()['content-type']).toContain(
-            'multipart/form-data; boundary=',
-          )
-          expect(route.request().postData()).toContain('month,total')
-          uploaded = true
-          await route.fulfill({ status: 201, json: dataset })
+        } else if (path === '/api/items' && method === 'POST') {
+          const body = route.request().postDataJSON()
+          expect(Object.keys(body).sort()).toEqual(['description', 'title'])
+          const created = { ...item, ...body, id: items.length + 1 }
+          items.unshift(created)
+          await route.fulfill({ status: 201, json: created })
+        } else if (path === '/api/items/1' && method === 'PUT') {
+          items[0] = { ...items[0], ...route.request().postDataJSON() }
+          await route.fulfill({ json: items[0] })
+        } else if (path === '/api/items/1' && method === 'DELETE') {
+          items = []
+          await route.fulfill({ status: 204 })
         } else await route.fulfill({ status: 404, json: { detail: 'Not found' } })
       }
     },
@@ -83,23 +85,36 @@ test('public example and unknown routes', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Page not found' })).toBeVisible()
 })
 
-test('protected route, upload, account and sign out', async ({ page }) => {
-  await page.goto('/datasets')
+test('protected route, item lifecycle, account and sign out', async ({ page }) => {
+  await page.goto('/items')
   await expect(page).toHaveURL(/\/login$/)
   await signIn(page)
-  await expect(page).toHaveURL(/\/datasets$/)
-  await expect(page.getByRole('heading', { name: 'No datasets yet' })).toBeVisible()
-  await page.getByLabel('Name', { exact: true }).fill('Sales')
-  await page.getByLabel('Description').fill('Monthly totals')
-  await page.getByLabel('CSV file').setInputFiles({
-    name: 'sales.csv',
-    mimeType: 'text/csv',
-    buffer: Buffer.from('month,total\nJanuary,10\nFebruary,20\n'),
-  })
-  await page.getByRole('button', { name: 'Upload dataset' }).click()
-  await expect(page.getByRole('status')).toHaveText('Dataset uploaded.')
-  await expect(page.getByRole('cell', { name: /Sales/ })).toBeVisible()
-  await expect(page.getByText('1 of 10 datasets used')).toBeVisible()
+  await expect(page).toHaveURL(/\/items$/)
+  await expect(page.getByRole('heading', { name: 'No items here' })).toBeVisible()
+  await page.getByLabel('Title', { exact: true }).fill('First idea')
+  await page.getByLabel('Description').fill('Some details')
+  await page.getByRole('button', { name: 'Create item' }).click()
+  await expect(page.getByRole('status')).toHaveText('Item created.')
+  await expect(
+    page.getByRole('cell', { name: 'First idea Some details', exact: true }),
+  ).toBeVisible()
+  await page.getByRole('button', { name: 'Edit First idea', exact: true }).click()
+  await expect(page.getByLabel('Title', { exact: true })).toHaveValue('First idea')
+  await page.getByLabel('Title', { exact: true }).fill('Updated idea')
+  await page.getByRole('button', { name: 'Save changes' }).click()
+  await expect(page.getByRole('status')).toHaveText('Item updated.')
+  await page.getByRole('button', { name: 'Edit Updated idea', exact: true }).click()
+  await page.getByRole('button', { name: 'Cancel edit' }).click()
+  await expect(page.getByLabel('Title', { exact: true })).toHaveValue('')
+  await page.getByRole('button', { name: 'Delete Updated idea', exact: true }).click()
+  await page.getByRole('button', { name: 'Cancel delete' }).click()
+  await expect(
+    page.getByRole('cell', { name: 'Updated idea Some details', exact: true }),
+  ).toBeVisible()
+  await page.getByRole('button', { name: 'Delete Updated idea', exact: true }).click()
+  await page.getByRole('button', { name: 'Confirm delete' }).click()
+  await expect(page.getByRole('status')).toHaveText('Item deleted.')
+  await expect(page.getByRole('heading', { name: 'No items here' })).toBeVisible()
   await page.getByRole('link', { name: 'Account', exact: true }).click()
   await expect(page.getByText('tester@example.com', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Sign out' }).click()
@@ -130,13 +145,13 @@ test('expired credentials clear the session', async ({ page }) => {
   await page.goto('/login')
   await signIn(page)
   await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible()
-  await page.route('**/api/data/catalog', (route) =>
+  await page.route('**/api/items?*', (route) =>
     route.fulfill({
       status: 401,
       json: { detail: 'Invalid or expired token' },
     }),
   )
-  await page.getByRole('link', { name: 'Datasets', exact: true }).click()
+  await page.getByRole('link', { name: 'Items', exact: true }).click()
   await expect(page).toHaveURL(/\/login$/)
   await expect(page.getByRole('button', { name: 'Sign out' })).toHaveCount(0)
 })
@@ -147,4 +162,56 @@ test('network failures display an error and allow retry', async ({ page }) => {
   await page.getByRole('button', { name: 'Send request' }).click()
   await expect(page.getByRole('alert')).toHaveText('Cannot reach the server. Please try again.')
   await expect(page.getByRole('button', { name: 'Send request' })).toBeEnabled()
+})
+
+test('failed item saves keep the draft for retry', async ({ page }) => {
+  await page.goto('/items')
+  await signIn(page)
+  await expect(page.getByRole('heading', { name: 'Add an item' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Create item' })).toBeDisabled()
+  await page.getByLabel('Title', { exact: true }).fill('Keep my draft')
+  await page.getByLabel('Description').fill('Do not lose this')
+  let fail = true
+  await page.route('**/api/items', (route) => {
+    if (!fail) return route.fallback()
+    fail = false
+    return route.fulfill({ status: 503, json: { detail: 'Please try again' } })
+  })
+  await page.getByRole('button', { name: 'Create item' }).click()
+  await expect(page.getByRole('alert')).toHaveText('Please try again')
+  await expect(page.getByLabel('Title', { exact: true })).toHaveValue('Keep my draft')
+  await expect(page.getByLabel('Description')).toHaveValue('Do not lose this')
+  await page.getByRole('button', { name: 'Create item' }).click()
+  await expect(
+    page.getByRole('cell', { name: 'Keep my draft Do not lose this', exact: true }),
+  ).toBeVisible()
+})
+
+test('pagination returns to the previous page after deleting its last item', async ({ page }) => {
+  let items = Array.from({ length: 21 }, (_, index) => ({
+    ...item,
+    id: index + 1,
+    title: `Item ${index + 1}`,
+  }))
+  await page.route('**/api/items?*', (route) => {
+    const offset = Number(new URL(route.request().url()).searchParams.get('offset'))
+    return route.fulfill({ json: { items: items.slice(offset, offset + 20), total: items.length } })
+  })
+  await page.route('**/api/items/21', (route) => {
+    expect(route.request().method()).toBe('DELETE')
+    items = items.filter((entry) => entry.id !== 21)
+    return route.fulfill({ status: 204 })
+  })
+  await page.goto('/items')
+  await signIn(page)
+  await expect(page.getByText('21 items · Page 1')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Previous' })).toBeDisabled()
+  await page.getByRole('button', { name: 'Next', exact: true }).click()
+  await expect(page.getByText('21 items · Page 2')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Next', exact: true })).toBeDisabled()
+  await page.getByRole('button', { name: 'Delete Item 21', exact: true }).click()
+  await page.getByRole('button', { name: 'Confirm delete' }).click()
+  await expect(page.getByText('20 items · Page 1')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Previous' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Next', exact: true })).toBeDisabled()
 })

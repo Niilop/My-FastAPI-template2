@@ -18,8 +18,8 @@ Open <http://localhost:5173>. Vite forwards `/api/*` to `http://127.0.0.1:8000/*
 
 - Public overview and example request form.
 - Registration and login using the existing API.
-- Protected account and dataset pages, with return-to-page after login.
-- CSV upload, catalog, column metadata, and quota display.
+- Protected account and items pages, with return-to-page after login.
+- Private items with create/edit/delete forms and pagination.
 - Loading, empty, validation, network error, and expired-session handling.
 - Responsive styles and accessible labels, navigation, and form status messages.
 
@@ -32,13 +32,13 @@ src/
   api/          Fetch wrapper, error parsing, response types
   auth/         Session context/provider and route guard
   components/   Shared application layout
-  pages/        Overview, login/register, account, datasets
+  pages/        Overview, login/register, account, items
   App.tsx       Route definitions
   main.tsx      Application entry point
   styles.css    Shared styles and responsive layout
 ```
 
-Add a page under `src/pages/` and register it in `App.tsx`. Place private routes under `RequireAuth`. Use `useAuth().request` for authenticated calls so expired credentials are handled consistently. Use `apiRequest` for public calls. Both accept normal fetch options, including abort signals; use `FormData` for uploads without manually setting `Content-Type`.
+Add a page under `src/pages/` and register it in `App.tsx`. Place private routes under `RequireAuth`. Use `useAuth().request` for authenticated calls so expired credentials are handled consistently. Use `apiRequest` for public calls. Both accept normal fetch options, including abort signals. The items page demonstrates JSON writes and paginated reads without a separate state or form library.
 
 Response interfaces in `src/api/types.ts` mirror the backend schemas. Keep them in sync when changing API contracts; the fetch wrapper does not perform runtime schema validation.
 
@@ -65,6 +65,6 @@ From the repository root, use `docker compose --profile ui up --build`. The fron
 
 Nginx forwards `/api/` to `API_UPSTREAM` (default `http://backend:8000`) and falls back to `index.html` for client routes. Hashed assets are cached; HTML is revalidated. `API_UPSTREAM` has no trailing slash and must be an HTTP(S) URL reachable from the frontend container. DNS resolution uses Docker's internal resolver.
 
-The proxy defaults to an 11 MiB request-body limit (`CLIENT_MAX_BODY_SIZE=11m`) to accommodate a 10 MiB file plus multipart fields. If you raise backend `MAX_UPLOAD_BYTES`, raise this limit too. The backend still enforces its exact file limit. The proxy replaces forwarded client headers; Compose trusts those headers and keeps the backend's published port bound to loopback. Keep direct backend access restricted when deploying behind a proxy.
+The proxy has a 1 MiB request-body limit in `nginx.conf.template`. It replaces forwarded client headers; Compose trusts those headers and keeps the backend's published port bound to loopback. Keep direct backend access restricted when deploying behind a proxy.
 
 References: [Vite](https://vite.dev/guide/), [React Router](https://reactrouter.com/start/declarative/installation).

@@ -12,8 +12,7 @@ export function AuthPage({ register = false }: { register?: boolean }) {
   const [error, setError] = useState('')
   const [pending, setPending] = useState(false)
   const from: unknown = location.state?.from
-  const destination =
-    typeof from === 'string' && ['/datasets', '/account'].includes(from) ? from : '/'
+  const destination = typeof from === 'string' && ['/items', '/account'].includes(from) ? from : '/'
 
   if (session) return <Navigate to={destination} replace />
 
@@ -55,7 +54,7 @@ export function AuthPage({ register = false }: { register?: boolean }) {
       <p className="muted">
         {register
           ? 'Get started with your own workspace.'
-          : 'Sign in to access your datasets and account.'}
+          : 'Sign in to access your items and account.'}
       </p>
       {!register && location.state?.registered && (
         <p className="notice success" role="status">

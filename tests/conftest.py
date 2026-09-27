@@ -1,6 +1,5 @@
 import os
 from collections.abc import Iterator
-from pathlib import Path
 
 # Set these before importing the app; tests never connect to the developer's database.
 os.environ["DATABASE_URL"] = "sqlite://"
@@ -14,7 +13,6 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from backend.core.config import get_settings
 from backend.core.database import Base, get_db
 from backend.core.rate_limit import limiter
 from backend.main import create_app
@@ -44,9 +42,8 @@ def db(session_factory: sessionmaker[Session]) -> Iterator[Session]:
 
 @pytest.fixture
 def client(
-    session_factory: sessionmaker[Session], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    session_factory: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
 ) -> Iterator[TestClient]:
-    settings = get_settings().model_copy(update={"data_dir": tmp_path})
     monkeypatch.setattr(job_service, "SessionLocal", session_factory)
     limiter.reset()
     app = create_app()
@@ -56,7 +53,6 @@ def client(
             yield session
 
     app.dependency_overrides[get_db] = override_db
-    app.dependency_overrides[get_settings] = lambda: settings
     with TestClient(app) as test_client:
         yield test_client
     limiter.reset()

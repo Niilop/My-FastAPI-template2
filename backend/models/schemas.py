@@ -36,15 +36,27 @@ class UserResponse(BaseModel):
     settings: dict[str, Any]
 
 
-class DataCatalogResponse(BaseModel):
+class ItemWrite(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    title: str = Field(min_length=1, max_length=255)
+    description: str = Field(default="", max_length=5000)
+
+
+class ItemResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    name: str
+    owner_id: int
+    title: str
     description: str
-    data_metadata: dict[str, Any]
     created_at: datetime
     updated_at: datetime
+
+
+class ItemListResponse(BaseModel):
+    items: list[ItemResponse]
+    total: int
 
 
 class JobSubmitResponse(BaseModel):
