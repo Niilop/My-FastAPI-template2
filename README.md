@@ -9,6 +9,10 @@ A FastAPI backend with PostgreSQL, authentication, a small CRUD example, and a R
 - A route/service example and an in-process background job example.
 - Liveness and database readiness endpoints, configurable CORS, automated tests.
 
+## Development context
+
+The [md/](md/README.md) folder contains the project context, implemented architecture, development workflow, current status, decisions, and an implementation-plan template. Start there when adapting this repository to a new project or handing work between developers and AI agents. Root [AGENTS.md](AGENTS.md) directs coding agents to that context and explains what to keep updated.
+
 ## Local development
 
 Run commands from the repository root. Install [uv](https://docs.astral.sh/uv/getting-started/installation/) if needed, then:
