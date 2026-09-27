@@ -1,85 +1,65 @@
-# backend/core/config.py
+import json
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated
-from pydantic_settings import BaseSettings, SettingsConfigDict, NoDecode
-from pydantic import SecretStr, field_validator, model_validator
 
-# Repo root when run locally (backend/core/config.py -> backend -> repo root).
-# Docker overrides DATA_DIR explicitly (see docker-compose.yaml) since the
-# container layout is flattened relative to the local one.
-_REPO_ROOT = Path(__file__).resolve().parents[2]
+from pydantic import Field, SecretStr, field_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 class Settings(BaseSettings):
-    # App Configuration
-    app_name: str = "DS API"
-    debug: bool = True
-    
-    # LLM Provider: gemini | openai | anthropic
-    llm_provider: str
-
-    # API Keys — only the one matching llm_provider is required at runtime
-    api_key: SecretStr = SecretStr("")
-    openai_api_key: SecretStr = SecretStr("")
-    anthropic_api_key: SecretStr = SecretStr("")
-
-    # Model names per provider
-    gemini_model: str
-    openai_model: str
-    anthropic_model: str
-    
-    # Database Configuration
+    app_name: str = "FastAPI Template"
+    debug: bool = False
     database_url: str
-
-    # JWT Configuration
     secret_key: SecretStr
-    algorithm: str = "HS256"
-    access_token_expire_minutes: int = 30
+    access_token_expire_minutes: int = Field(default=30, ge=1)
+    cors_origins: Annotated[list[str], NoDecode] = Field(default_factory=list)
+    data_dir: Path = REPO_ROOT / "data"
+    max_upload_bytes: int = Field(default=10 * 1024 * 1024, ge=1)
+    max_datasets_per_user: int = Field(default=10, ge=1)
 
-    # CORS Origins — accepts either JSON array syntax or a plain
-    # comma-separated string (e.g. CORS_ORIGINS=http://a,http://b) in .env
-    cors_origins: Annotated[list[str], NoDecode] = [
-        "http://localhost:8501",
-        "http://127.0.0.1:8501",
-        "http://localhost:3000"
-    ]
+    model_config = SettingsConfigDict(
+        env_file=REPO_ROOT / ".env", env_file_encoding="utf-8", extra="ignore"
+    )
 
-    # Where uploaded files / datasets are stored. Defaults to the repo-root
-    # "data" folder for local runs; the backend container overrides this to
-    # /app/data (its mounted volume) via docker-compose.yaml.
-    data_dir: str = str(_REPO_ROOT / "data")
+    @field_validator("secret_key")
+    @classmethod
+    def validate_secret(cls, value: SecretStr) -> SecretStr:
+        secret = value.get_secret_value()
+        if len(secret.encode()) < 32 or secret.lower().startswith(
+            ("change", "your-secret", "replace")
+        ):
+            raise ValueError("SECRET_KEY must be a randomly generated secret of at least 32 bytes")
+        return value
 
-    model_config = SettingsConfigDict(env_file=(".env", "../.env"), env_file_encoding="utf-8", extra="ignore")
+    @field_validator("database_url")
+    @classmethod
+    def normalize_database_url(cls, value: str) -> str:
+        if value.startswith("postgresql://"):
+            return value.replace("postgresql://", "postgresql+psycopg://", 1)
+        return value
 
     @field_validator("cors_origins", mode="before")
     @classmethod
-    def _split_cors_origins(cls, value):
-        """Allow CORS_ORIGINS as a plain comma-separated string in .env,
-        not just JSON-array syntax."""
+    def parse_cors_origins(cls, value: object) -> object:
         if isinstance(value, str):
-            return [origin.strip() for origin in value.split(",") if origin.strip()]
+            return (
+                json.loads(value)
+                if value.strip().startswith("[")
+                else [origin.strip() for origin in value.split(",") if origin.strip()]
+            )
         return value
 
-    @model_validator(mode="after")
-    def _check_provider_key(self):
-        """Fail fast at startup if the key for the selected LLM_PROVIDER is
-        missing, instead of a cryptic error the first time it's used."""
-        provider = self.llm_provider.lower()
-        key_by_provider = {
-            "gemini": self.api_key,
-            "openai": self.openai_api_key,
-            "anthropic": self.anthropic_api_key,
-        }
-        key = key_by_provider.get(provider)
-        if key is not None and not key.get_secret_value():
-            env_var = "API_KEY" if provider == "gemini" else f"{provider.upper()}_API_KEY"
-            raise ValueError(
-                f"LLM_PROVIDER is '{provider}' but {env_var} is empty. Set it in .env."
-            )
-        return self
+    @field_validator("cors_origins")
+    @classmethod
+    def validate_cors_origins(cls, value: list[str]) -> list[str]:
+        if "*" in value:
+            raise ValueError("Use explicit CORS origins when allowing credentials")
+        return value
 
 
 @lru_cache
-def get_settings():
+def get_settings() -> Settings:
     return Settings()

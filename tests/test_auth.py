@@ -1,58 +1,109 @@
-#!/usr/bin/env python3
-import requests
-import json
-from datetime import datetime
+from datetime import timedelta
 
-BASE_URL = "http://127.0.0.1:8000"
+import jwt
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
-# Test register
-timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-user_data = {
-    "email": f"test{timestamp}@example.com",
-    "username": f"testuser{timestamp}",
-    "password": "pass123"
-}
+from backend.core.config import get_settings
+from backend.models.database import User
+from backend.services.auth_service import create_access_token
 
-print("Testing registration...")
-print(f"Payload: {json.dumps(user_data, indent=2)}")
 
-try:
-    response = requests.post(f"{BASE_URL}/auth/register", json=user_data)
-    print(f"Status: {response.status_code}")
-    print(f"Response: {json.dumps(response.json(), indent=2)}")
-except Exception as e:
-    print(f"Error: {e}")
-
-# If registration successful, test login
-if response.status_code == 200:
-    print("\nTesting login...")
-    
-    # OAuth2 standard uses 'username' as the key, even if you are passing an email
-    login_payload = {
-        "username": user_data["email"], 
-        "password": user_data["password"]
+def test_registration_login_and_profile(client: TestClient, db: Session) -> None:
+    payload = {
+        "email": "Test@EXAMPLE.com",
+        "username": "tester",
+        "password": "a-long-test-password",
     }
-    
-    try:
-        # Change 'json=login_data' to 'data=login_payload'
-        response = requests.post(f"{BASE_URL}/auth/login", data=login_payload)
-        print(f"Status: {response.status_code}")
-        print(f"Response: {json.dumps(response.json(), indent=2)}")
-    except Exception as e:
-        print(f"Error: {e}")
+    response = client.post("/auth/register", json=payload)
+    assert response.status_code == 201
+    assert response.json()["email"] == "test@example.com"
+    assert "password_hash" not in response.json()
+    user = db.scalar(select(User))
+    assert user.password_hash.startswith("$argon2id$")
+    for identifier in ("tester", "TEST@example.com"):
+        response = client.post(
+            "/auth/login", data={"username": identifier, "password": payload["password"]}
+        )
+        assert response.status_code == 200
+        profile = client.get(
+            "/auth/me", headers={"Authorization": f"Bearer {response.json()['access_token']}"}
+        )
+        assert profile.status_code == 200
+        assert profile.json()["id"] == user.id
 
-if response.status_code == 200:
-    token = response.json().get("access_token")
-    print("\nTesting 'Get Me' endpoint...")
-    
-    # We must pass the token in the Headers, not the Body
-    headers = {
-        "Authorization": f"Bearer {token}"
+
+@pytest.mark.parametrize("duplicate", [{"email": "TESTER@example.com"}, {"username": "tester"}])
+def test_duplicate_registration(
+    client: TestClient, auth_headers: dict[str, str], duplicate: dict[str, str]
+) -> None:
+    payload = {
+        "email": "other@example.com",
+        "username": "other",
+        "password": "a-long-test-password",
     }
-    
-    try:
-        response = requests.get(f"{BASE_URL}/auth/me", headers=headers)
-        print(f"Status: {response.status_code}")
-        print(f"Response: {json.dumps(response.json(), indent=2)}")
-    except Exception as e:
-        print(f"Error: {e}")
+    payload.update(duplicate)
+    assert client.post("/auth/register", json=payload).status_code == 409
+    assert client.get("/auth/me", headers=auth_headers).status_code == 200
+
+
+@pytest.mark.parametrize(
+    "updates",
+    [
+        {"password": "short"},
+        {"password": "x" * 129},
+        {"username": "a@b.com"},
+        {"email": "invalid"},
+        {"username": ""},
+    ],
+)
+def test_registration_validation(client: TestClient, updates: dict[str, str]) -> None:
+    payload = {
+        "email": "test@example.com",
+        "username": "tester",
+        "password": "a-long-test-password",
+    }
+    payload.update(updates)
+    assert client.post("/auth/register", json=payload).status_code == 422
+
+
+@pytest.mark.parametrize("identifier", ["tester", "missing"])
+def test_wrong_credentials(
+    client: TestClient, auth_headers: dict[str, str], identifier: str
+) -> None:
+    response = client.post("/auth/login", data={"username": identifier, "password": "wrong"})
+    assert response.status_code == 401
+    assert response.headers["www-authenticate"] == "Bearer"
+
+
+def test_invalid_tokens(client: TestClient, auth_headers: dict[str, str]) -> None:
+    key = get_settings().secret_key.get_secret_value()
+    tokens = [
+        "invalid",
+        create_access_token(1, timedelta(seconds=-1)),
+        create_access_token(999),
+        jwt.encode({"sub": "1"}, key, algorithm="HS256"),
+        jwt.encode({"sub": "not-an-id", "iat": 1, "exp": 9999999999}, key, algorithm="HS256"),
+        jwt.encode({"sub": "1", "iat": 1, "exp": 9999999999}, "x" * 40, algorithm="HS256"),
+    ]
+    for token in tokens:
+        response = client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
+        assert response.status_code == 401
+        assert response.headers["www-authenticate"] == "Bearer"
+    assert client.get("/auth/me").status_code == 401
+
+
+def test_login_rate_limit(client: TestClient) -> None:
+    for _ in range(10):
+        assert (
+            client.post(
+                "/auth/login", data={"username": "missing", "password": "wrong"}
+            ).status_code
+            == 401
+        )
+    assert (
+        client.post("/auth/login", data={"username": "missing", "password": "wrong"}).status_code
+        == 429
+    )

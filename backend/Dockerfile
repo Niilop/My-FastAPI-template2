@@ -1,15 +1,14 @@
-# backend/Dockerfile
-FROM python:3.11-slim
-
+FROM python:3.12-slim
+COPY --from=ghcr.io/astral-sh/uv:0.12.11 /uv /uvx /bin/
 WORKDIR /app
-
-COPY backend/requirements.txt /app/
-
-# Install dependencies (adjust if you have requirements.txt)
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy only backend folder contents into /app
-COPY ./backend /app
-
-# Run the app
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
+COPY pyproject.toml uv.lock ./
+COPY backend/pyproject.toml backend/pyproject.toml
+COPY frontend/pyproject.toml frontend/pyproject.toml
+RUN uv sync --locked --no-dev --package backend
+COPY backend backend
+RUN useradd --create-home app && mkdir -p /app/data && chown app:app /app/data
+USER app
+ENV PATH="/app/.venv/bin:$PATH"
+EXPOSE 8000
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]

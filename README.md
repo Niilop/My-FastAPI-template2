@@ -1,283 +1,130 @@
-# FastAPI LLM Template
+# FastAPI Template
 
-A modular FastAPI backend template for building LLM-powered applications with RAG, persistent chat, async jobs, and multi-provider AI support.
+A small FastAPI backend with PostgreSQL, authentication, file uploads, and an optional Streamlit API tester. Python 3.12+; dependencies are managed with uv.
 
----
+- Registration and login by email or username, Argon2 password hashing, expiring JWTs.
+- SQLAlchemy models and Alembic migrations.
+- Per-user CSV catalog with bounded uploads and generated filenames.
+- Rate limits on registration, login, uploads, and background job submission.
+- A route/service example and an in-process background job example.
+- Liveness and database readiness endpoints, configurable CORS, automated tests.
 
-## Features
+## Local development
 
-### Authentication
-- JWT-based login (HS256, configurable expiry)
-- User registration with bcrypt password hashing
-- Login via email or username
-- Protected routes via `Depends(get_current_user)`
-
-### Retrieval-Augmented Generation (RAG)
-- Document ingestion with automatic chunking (RecursiveCharacterTextSplitter)
-- Vector embeddings via Google Gemini (768-dim, stored in pgvector)
-- Cosine similarity retrieval from PostgreSQL
-- Sync (`POST /rag/ingest`) and async (`POST /rag/ingest/async`) ingestion
-- LLM-powered query answering with retrieved context
-- Per-user document isolation
-
-### Persistent Chat
-- Multi-turn conversation threading
-- Full message history stored per conversation
-- System prompt support
-- Conversation lifecycle: create, continue, list, delete
-
-### Async Background Jobs
-- UUID-based job tracking
-- States: `PENDING → RUNNING → COMPLETED / FAILED`
-- Poll job status via `GET /jobs/{job_id}`
-- Used for non-blocking RAG ingestion
-
-### LLM Integration
-- Multi-provider support: **Gemini**, **OpenAI**, **Anthropic**
-- Runtime provider selection via `LLM_PROVIDER` env var
-- Streaming text summarization (SSE)
-- LangChain abstraction for easy provider swapping
-
-### Data Management
-- CSV upload with validation (10 MB max, 10 datasets per user)
-- Automatic metadata extraction
-- Persistent catalog with timestamps
-
-### Rate Limiting
-- slowapi-based throttling per endpoint
-- Returns HTTP 429 when exceeded
-
-### Frontend
-- Streamlit UI with login/register, chat interface, and API testing
-
----
-
-## Project Structure
-
-```
-Template/
-├── backend/
-│   ├── api/endpoints/
-│   │   ├── auth.py           # Registration, login, /me
-│   │   ├── chat.py           # Conversation threading
-│   │   ├── rag.py            # Document ingestion & querying
-│   │   ├── jobs.py           # Async job status
-│   │   ├── llm.py            # Summarization (streaming)
-│   │   ├── data.py           # CSV upload & catalog
-│   │   └── example.py        # Template endpoint
-│   ├── services/
-│   │   ├── auth_service.py
-│   │   ├── rag_service.py
-│   │   ├── chat_service.py
-│   │   ├── job_service.py
-│   │   ├── llm_service.py
-│   │   └── data_service.py
-│   ├── models/
-│   │   ├── database.py       # SQLAlchemy ORM models
-│   │   └── schemas.py        # Pydantic schemas
-│   ├── core/
-│   │   ├── config.py         # Settings & env vars
-│   │   ├── database.py       # DB engine & session
-│   │   ├── rate_limit.py
-│   │   └── logging.py
-│   ├── alembic/versions/
-│   │   ├── 001_initial.py
-│   │   ├── 002_add_document_chunks.py
-│   │   ├── 003_add_chat_threads.py
-│   │   └── 004_add_background_jobs.py
-│   ├── main.py
-│   ├── requirements.txt      # used by backend/Dockerfile
-│   └── pyproject.toml        # used by uv for local (non-Docker) dev
-├── frontend/
-│   ├── app.py                # Streamlit UI
-│   ├── requirements.txt      # used by frontend/Dockerfile
-│   └── pyproject.toml        # used by uv for local (non-Docker) dev
-├── tests/
-│   ├── test_auth.py
-│   └── test_rag_service.py
-├── data/
-│   ├── raw/
-│   ├── processed/
-│   └── external/
-├── docker-compose.yaml
-├── pyproject.toml            # uv workspace root (backend + frontend)
-├── uv.lock
-└── .env.example
-```
-
----
-
-## Architecture
-
-```
-Client
-  ↓
-FastAPI Route  (api/endpoints/)
-  ↓
-Pydantic Schema  (validation)
-  ↓
-Service Layer  (business logic)
-  ↓
-PostgreSQL / pgvector / LLM Provider
-  ↓
-JSON Response
-```
-
-### Database Schema
-
-| Table | Key Columns |
-|---|---|
-| `users` | email, username, password_hash |
-| `conversations` | user_id, title |
-| `messages` | conversation_id, role, content |
-| `document_chunks` | user_id, source, content, embedding (768-dim) |
-| `background_jobs` | id (UUID), job_type, status, result, error |
-| `data_catalogs` | user_id, name, file_path, metadata |
-
----
-
-## Getting Started
-
-### 1. Configure environment
+Run commands from the repository root. Install [uv](https://docs.astral.sh/uv/getting-started/installation/) if needed, then:
 
 ```bash
+uv sync --all-packages
 cp .env.example .env
-# Fill in: DATABASE_URL, LLM_PROVIDER, GEMINI_API_KEY / OPENAI_API_KEY / ANTHROPIC_API_KEY, JWT_SECRET_KEY
+uv run --no-sync python -c "import secrets; print(secrets.token_urlsafe(48))"
 ```
 
-### 2. Start services
+Paste the generated value into `SECRET_KEY` in `.env`. Set `DATABASE_URL` to a **dedicated, empty database** in your PostgreSQL instance (for example, in `~/code/devstack`). PostgreSQL extensions and Redis are not required. The repository does not start another database server.
 
 ```bash
-docker-compose up --build
+uv run --no-sync alembic -c backend/alembic.ini upgrade head
+uv run --no-sync uvicorn backend.main:app --reload
 ```
 
-This starts:
-- `db` — PostgreSQL 16 with pgvector (port 5432)
-- `backend` — FastAPI + Uvicorn with hot reload (port 8000)
-- `frontend` — Streamlit UI (port 8501)
+Open <http://127.0.0.1:8000/docs> to try the API. Registration requires a password of 12–128 characters and a username of 3–100 letters, digits, dots, underscores, or hyphens. Login uses form fields `username` and `password`; `username` can contain either the username or email.
 
-### 3. Apply migrations
+To install only backend dependencies, use `uv sync --package backend`. Use `uv sync --all-packages` for the UI and development tools.
+
+Optional UI, in another terminal:
 
 ```bash
-cd backend
-alembic upgrade head
+uv run --no-sync streamlit run frontend/app.py
 ```
 
----
+The UI defaults to `http://127.0.0.1:8000`; override `API_URL` for a remote backend. It supports registration, login, the example endpoint, and CSV uploads/catalog browsing.
 
-## Local Development (without Docker)
+## Configuration
 
-Dependencies are managed with [`uv`](https://docs.astral.sh/uv/) via the workspace `pyproject.toml` / `uv.lock` at the repo root — this is cross-platform and works the same on Windows, macOS, and Linux/WSL. `requirements.txt` files are kept alongside for the Docker images and stay in sync manually when dependencies change.
+The backend reads the repository-root `.env` regardless of the working directory. Environment variables override it. See [.env.example](.env.example) for the full configuration.
+
+| Setting | Default / requirement |
+| --- | --- |
+| `DATABASE_URL` | Required; `postgresql+psycopg://user:password@host:5432/database` |
+| `SECRET_KEY` | Required; random secret of at least 32 bytes |
+| `DEBUG` | `false` |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | `30` |
+| `CORS_ORIGINS` | Empty; explicit comma-separated URLs or a JSON array |
+| `DATA_DIR` | Repository `data/` directory |
+| `MAX_UPLOAD_BYTES` | `10485760` (10 MiB) |
+| `MAX_DATASETS_PER_USER` | `10` |
+
+JWT signing uses HS256. Keep `.env` out of Git. Existing `postgresql://` URLs are normalized to use psycopg 3. URL-encode special characters in database credentials.
+
+## Docker
+
+The images install from the same `uv.lock` used locally and run as an unprivileged user. Compose runs the backend; the UI is an optional profile. Uploaded files live in a named volume.
+
+Set `.env`'s `DATABASE_URL` to an address reachable **from the container**. For a host-published devstack database, use `host.docker.internal` instead of `localhost` (the host-gateway mapping is included). Ensure that PostgreSQL's published port is reachable from that Docker network. Alternatively, attach the backend to your devstack network and use its database service hostname.
 
 ```bash
-# From the repo root — installs both backend and frontend into .venv/
-uv sync
-
-# Run the backend
-cd backend
-uv run uvicorn main:app --reload
-
-# Run the frontend (separate terminal)
-cd frontend
-uv run streamlit run app.py
+docker compose build
+docker compose run --rm backend alembic -c backend/alembic.ini upgrade head
+docker compose up -d
+# Include the API tester:
+docker compose --profile ui up --build -d
 ```
 
-You'll still need Postgres/pgvector reachable at `DATABASE_URL` — either run `docker-compose up db` for just the database, or point `DATABASE_URL` at a local Postgres instance.
+Migrations are an explicit deployment step. Run them once before starting new application processes. The image does not enable hot reload.
 
----
+## API
 
-## API Endpoints
+| Method | Path | Purpose |
+| --- | --- | --- |
+| POST | `/auth/register` | Create user (201) |
+| POST | `/auth/login` | Issue bearer token |
+| GET | `/auth/me` | Current user |
+| POST | `/example/` | Public route/service example |
+| POST | `/example/async` | Authenticated background example (202) |
+| GET | `/jobs/{job_id}` | Current user's job status/result |
+| POST | `/data/upload` | Upload UTF-8 CSV as multipart `file`, `name`, optional `description` (201) |
+| GET | `/data/catalog` | Current user's datasets |
+| GET | `/data/count` | Dataset quota usage |
+| GET | `/health` | Process liveness |
+| GET | `/ready` | Database connectivity (503 on failure) |
 
-### Auth
-| Method | Path | Description |
-|---|---|---|
-| POST | `/auth/register` | Register a new user |
-| POST | `/auth/login` | Get JWT token |
-| GET | `/auth/me` | Current user info |
+`GET /data/` remains an alias for the catalog. CSV metadata includes row count, column count, column names, and empty-value counts. Files must have unique nonempty headers and consistent row widths. Server filesystem paths are excluded from API responses.
 
-### Chat
-| Method | Path | Description |
-|---|---|---|
-| POST | `/chat/conversations` | Create conversation |
-| GET | `/chat/conversations` | List conversations |
-| POST | `/chat/conversations/{id}/messages` | Send message |
-| GET | `/chat/conversations/{id}/messages` | Get history |
-| DELETE | `/chat/conversations/{id}` | Delete conversation |
+Background jobs use FastAPI's in-process tasks and a separate database session. They are suitable for short tasks; process termination can leave jobs pending or running. Add a durable queue when your application needs retries or recovery. Rate limits use process-local memory; configure shared storage before deploying multiple workers. Put request-body limits at your reverse proxy as well: upload limits are enforced after multipart parsing and while copying the file. `/ready` checks database connectivity, not migration status.
 
-### RAG
-| Method | Path | Description |
-|---|---|---|
-| POST | `/rag/ingest` | Ingest document (sync) |
-| POST | `/rag/ingest/async` | Ingest document (async job) |
-| POST | `/rag/query` | Query with retrieval |
+## Project layout
 
-### Jobs
-| Method | Path | Description |
-|---|---|---|
-| GET | `/jobs/{job_id}` | Poll job status |
+```text
+backend/
+  api/endpoints/    HTTP routes and dependencies
+  core/            Settings, database sessions, rate limiting
+  models/          ORM models and request/response schemas
+  services/        Authentication, CSV processing, background jobs
+  alembic/         Schema migrations
+  main.py          App factory and health endpoints
+frontend/app.py    Optional API tester
+tests/             Isolated automated tests and REST client examples
+```
 
-### LLM
-| Method | Path | Description |
-|---|---|---|
-| POST | `/llm/summarize` | Streaming summarization |
-
-### Data
-| Method | Path | Description |
-|---|---|---|
-| POST | `/data/upload` | Upload CSV |
-| GET | `/data/catalog` | List datasets |
-
-### System
-| Method | Path | Description |
-|---|---|---|
-| GET | `/health` | Health check |
-| GET | `/metrics` | Basic metrics |
-| GET | `/docs` | Swagger UI |
-
----
-
-## Database Migrations
+Add models in `backend/models/database.py`, request/response schemas in `schemas.py`, business logic in `services/`, and routers in `api/endpoints/`. Register new routers in `create_app()`.
 
 ```bash
-# Create a new migration after changing models/database.py
-alembic revision --autogenerate -m "description"
-
-# Apply migrations
-alembic upgrade head
+uv run --no-sync alembic -c backend/alembic.ini revision --autogenerate -m "describe change"
+uv run --no-sync alembic -c backend/alembic.ini upgrade head
 ```
 
----
+Review generated migrations before applying them.
 
-## Testing
+**Migration compatibility:** this cleanup replaces the old migration history with `0001_core`, intended for new databases. Do not apply or stamp it over an existing installation. Existing data needs a separate, reviewed migration/export plan; previous password hashes and tokens are not compatible with the new authentication setup. No existing database is modified by checking out these changes.
+
+## Checks
 
 ```bash
-# Run test suite
-pytest tests/
-
-# Or use the REST client examples
-# tests/test.http (VS Code REST Client)
+uv sync --all-packages --locked
+uv run --no-sync ruff check .
+uv run --no-sync ruff format --check .
+uv run --no-sync pytest
 ```
 
----
+Tests use isolated SQLite databases and temporary upload directories, with no running API or external services. CI also checks migration upgrade, schema consistency, and downgrade on PostgreSQL.
 
-## LLM Provider Configuration
-
-Set `LLM_PROVIDER` in `.env` to switch providers at runtime:
-
-| Value | Provider | Required Key |
-|---|---|---|
-| `gemini` | Google Gemini | `GEMINI_API_KEY` |
-| `openai` | OpenAI | `OPENAI_API_KEY` |
-| `anthropic` | Anthropic | `ANTHROPIC_API_KEY` |
-
----
-
-## Purpose
-
-This template is a starting point for building:
-- LLM-powered chat applications
-- RAG systems with persistent vector storage
-- Data pipelines with async processing
-- Multi-tenant AI backends
-
-It is intentionally **modular**: swap providers, add endpoints, or extend the service layer without restructuring the project.
+Authentication follows the libraries used in [FastAPI's security guide](https://fastapi.tiangolo.com/tutorial/security/oauth2-jwt/); container dependency installation follows [uv's Docker guide](https://docs.astral.sh/uv/guides/integration/docker/).

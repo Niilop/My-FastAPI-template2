@@ -1,63 +1,56 @@
-# backend/api/endpoints/auth.py
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from core.database import get_db
-from models.schemas import UserCreate, UserLogin, Token, UserResponse
-from services.auth_service import (
-    create_user, authenticate_user, create_access_token, decode_token, get_user_by_email
+
+from backend.core.database import get_db
+from backend.core.rate_limit import limiter
+from backend.models.database import User
+from backend.models.schemas import Token, UserCreate, UserResponse
+from backend.services.auth_service import (
+    authenticate_user,
+    create_access_token,
+    create_user,
+    decode_token,
 )
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
-
-# This tells FastAPI where the client should send the login request to get a token
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 
-@router.post("/register", response_model=UserResponse)
-def register(user_create: UserCreate, db: Session = Depends(get_db)):
-    """
-    Register a new user.
-    
-    - **email**: Must be a valid email address
-    - **username**: Unique username
-    - **password**: Password for the account
-    """
+@router.post("/register", response_model=UserResponse, status_code=201)
+@limiter.limit("5/minute")
+def register(request: Request, user_create: UserCreate, db: Session = Depends(get_db)) -> User:
     try:
-        user = create_user(db, user_create)
-        return user
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
+        return create_user(db, user_create)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.post("/login", response_model=Token)
-def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    # form_data.username will now hold either the email or the username provided by the client
+@limiter.limit("10/minute")
+def login(
+    request: Request,
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db),
+) -> Token:
     user = authenticate_user(db, form_data.username, form_data.password)
-    
-    if not user:
+    if user is None:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=401,
             detail="Invalid credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
-    # Always use the user's actual email for the token payload, regardless of how they logged in
-    access_token = create_access_token(data={"sub": user.email})
-    return {"access_token": access_token, "token_type": "bearer"}
+    return Token(access_token=create_access_token(user.id))
+
 
 @router.get("/me", response_model=UserResponse)
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    token_data = decode_token(token)
-    if not token_data:
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
+    user_id = decode_token(token)
+    user = db.get(User, user_id) if user_id is not None else None
+    if user is None:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token"
+            status_code=401,
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
         )
-    
-    user = get_user_by_email(db, token_data["email"])
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
     return user
