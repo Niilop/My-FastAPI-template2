@@ -13,6 +13,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "playwright test",
+    "test:smoke": "playwright test --config playwright.smoke.config.ts",
     "test:ui": "playwright test --ui",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

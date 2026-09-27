@@ -15,7 +15,7 @@ Browser: React + TypeScript
 FastAPI BackgroundTasks -> job service -> separate database session
 ```
 
-Development uses frontend port 5173 and backend port 8000. Vite proxies API calls to the backend; starting Vite alone does not start FastAPI. In Docker, Nginx serves the built frontend and proxies to the backend service. Compose's optional `ui` profile enables the frontend. Database migrations are a separate step before application startup.
+Development uses frontend port 5173 and backend port 8000. `make dev` checks setup and starts both servers with shared shutdown; Vite proxies API calls to the local backend. In Docker, Nginx serves the built frontend and proxies to the backend service. Compose's optional `ui` profile enables the frontend. Database migrations are a separate step before normal application startup.
 
 | Location | Responsibility |
 | --- | --- |
@@ -30,6 +30,8 @@ Development uses frontend port 5173 and backend port 8000. Vite proxies API call
 | [frontend/src/auth/](../frontend/src/auth/) | In-memory session, authenticated requests, route guard |
 | [frontend/src/pages/](../frontend/src/pages/) | Overview, registration/login, account, item CRUD |
 | [tests/](../tests/) and [frontend/tests/](../frontend/tests/) | Backend tests and browser tests |
+| [scripts/](../scripts/) and [Makefile](../Makefile) | Safe setup, local server supervision, checks, isolated smoke orchestration |
+| [frontend/e2e/](../frontend/e2e/) and [compose.smoke.yaml](../compose.smoke.yaml) | Real browser-to-database test with disposable PostgreSQL and production app images |
 
 ## Data and authorization
 
@@ -53,6 +55,6 @@ Alembic history starts at `0001_core`. `0002_items` converts the former CSV cata
 - Rate limits use process-local memory. Multiple workers would need shared rate-limit storage for consistent enforcement.
 - Persistent login, refresh tokens, password reset, email verification, and administrative roles are not implemented.
 - `/health` checks process liveness; `/ready` checks a database query, not migration status.
-- Browser tests mock the API. CI also checks backend behavior and PostgreSQL migration consistency, but does not currently run the complete browser-to-database flow.
+- Most browser tests mock the API for focused UI coverage. A separate CI smoke job tests real registration, login, persistence, item CRUD, and ownership through Nginx, FastAPI, and PostgreSQL. It does not attempt exhaustive end-to-end coverage.
 
 These are extension points to assess for a concrete product, not an automatic backlog for the template.
