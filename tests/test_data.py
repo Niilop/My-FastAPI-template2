@@ -82,6 +82,25 @@ def test_upload_requires_auth(client: TestClient) -> None:
     assert upload(client, {}).status_code == 401
 
 
+@pytest.mark.parametrize("at_upload_limit", [False, True])
+def test_large_csv_field(
+    client: TestClient, auth_headers: dict[str, str], at_upload_limit: bool
+) -> None:
+    max_bytes = get_settings().max_upload_bytes
+    field_size = max_bytes - len(b"text\n\n") if at_upload_limit else 131_073
+    content = b"text\n" + b"x" * field_size + b"\n"
+    response = upload(client, auth_headers, content)
+    assert response.status_code == 201
+    assert response.json()["data_metadata"] == {
+        "columns": ["text"],
+        "num_cols": 1,
+        "num_rows": 1,
+        "missing_values": {"text": 0},
+    }
+    if at_upload_limit:
+        assert upload(client, auth_headers, content + b"\n").status_code == 413
+
+
 def test_failed_commit_cleans_up(
     client: TestClient,
     auth_headers: dict[str, str],

@@ -5,7 +5,12 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from backend.core.config import get_settings
 from backend.models.database import DataCatalog
+
+# The limit is process-wide; configure it once so concurrent uploads cannot change it.
+# A UTF-8 field cannot contain more characters than the upload's total byte count.
+csv.field_size_limit(get_settings().max_upload_bytes)
 
 
 def profile_csv(file_path: Path) -> dict[str, Any]:
