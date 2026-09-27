@@ -9,3 +9,9 @@
 .ruff_cache
 data
 tests
+**/node_modules
+**/dist
+**/test-results
+**/playwright-report
+**/.env
+**/.env.*

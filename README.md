@@ -1,6 +1,6 @@
 # FastAPI Template
 
-A small FastAPI backend with PostgreSQL, authentication, file uploads, and an optional Streamlit API tester. Python 3.12+; dependencies are managed with uv.
+A FastAPI backend with PostgreSQL, authentication, file uploads, and a React + TypeScript frontend. Python 3.12+ dependencies use uv; the frontend uses Node 24 and npm.
 
 - Registration and login by email or username, Argon2 password hashing, expiring JWTs.
 - SQLAlchemy models and Alembic migrations.
@@ -28,15 +28,17 @@ uv run --no-sync uvicorn backend.main:app --reload
 
 Open <http://127.0.0.1:8000/docs> to try the API. Registration requires a password of 12–128 characters and a username of 3–100 letters, digits, dots, underscores, or hyphens. Login uses form fields `username` and `password`; `username` can contain either the username or email.
 
-To install only backend dependencies, use `uv sync --package backend`. Use `uv sync --all-packages` for the UI and development tools.
+To install only backend dependencies, use `uv sync --package backend`. Use `uv sync --all-packages` to include the Python development tools.
 
-Optional UI, in another terminal:
+Start the frontend in another terminal:
 
 ```bash
-uv run --no-sync streamlit run frontend/app.py
+cd frontend
+npm ci
+npm run dev
 ```
 
-The UI defaults to `http://127.0.0.1:8000`; override `API_URL` for a remote backend. It supports registration, login, the example endpoint, and CSV uploads/catalog browsing.
+Open <http://localhost:5173>. Vite forwards `/api/*` requests to the backend on port 8000, so no CORS change is needed. The UI includes registration/login, protected account and dataset pages, CSV uploads/catalog browsing, and the example endpoint. Tokens stay in memory; reloading the page signs you out. See [frontend/README.md](frontend/README.md) for configuration, structure, and browser tests.
 
 ## Configuration
 
@@ -57,7 +59,7 @@ JWT signing uses HS256. Keep `.env` out of Git. Existing `postgresql://` URLs ar
 
 ## Docker
 
-The images install from the same `uv.lock` used locally and run as an unprivileged user. Compose runs the backend; the UI is an optional profile. Uploaded files live in a named volume.
+The backend installs from `uv.lock`; the frontend builds from `frontend/package-lock.json` and is served by unprivileged Nginx. Compose runs the backend; the UI is an optional profile. Uploaded files live in a named volume.
 
 Set `.env`'s `DATABASE_URL` to an address reachable **from the container**. For a host-published devstack database, use `host.docker.internal` instead of `localhost` (the host-gateway mapping is included). Ensure that PostgreSQL's published port is reachable from that Docker network. Alternatively, attach the backend to your devstack network and use its database service hostname.
 
@@ -65,7 +67,7 @@ Set `.env`'s `DATABASE_URL` to an address reachable **from the container**. For 
 docker compose build
 docker compose run --rm backend alembic -c backend/alembic.ini upgrade head
 docker compose up -d
-# Include the API tester:
+# Include the React frontend on port 5173:
 docker compose --profile ui up --build -d
 ```
 
@@ -101,7 +103,8 @@ backend/
   services/        Authentication, CSV processing, background jobs
   alembic/         Schema migrations
   main.py          App factory and health endpoints
-frontend/app.py    Optional API tester
+frontend/src/      React pages, routing, session state, and API client
+frontend/tests/    Desktop and mobile browser tests
 tests/             Isolated automated tests and REST client examples
 ```
 
@@ -125,6 +128,15 @@ uv run --no-sync ruff format --check .
 uv run --no-sync pytest
 ```
 
-Tests use isolated SQLite databases and temporary upload directories, with no running API or external services. CI also checks migration upgrade, schema consistency, and downgrade on PostgreSQL.
+Backend tests use isolated SQLite databases and temporary upload directories, with no running API or external services. CI also checks migration upgrade, schema consistency, and downgrade on PostgreSQL. The frontend has separate build, lint, and browser checks:
+
+```bash
+cd frontend
+npm ci
+npm run lint
+npm run build
+npx playwright install chromium
+npm test
+```
 
 Authentication follows the libraries used in [FastAPI's security guide](https://fastapi.tiangolo.com/tutorial/security/oauth2-jwt/); container dependency installation follows [uv's Docker guide](https://docs.astral.sh/uv/guides/integration/docker/).

@@ -1,5 +1,5 @@
 [tool.uv.workspace]
-members = ["backend", "frontend"]
+members = ["backend"]
 
 [tool.uv]
 package = false
