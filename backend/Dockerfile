@@ -4,7 +4,6 @@ WORKDIR /app
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
 COPY pyproject.toml uv.lock ./
 COPY backend/pyproject.toml backend/pyproject.toml
-COPY frontend/pyproject.toml frontend/pyproject.toml
 RUN uv sync --locked --no-dev --package backend
 COPY backend backend
 RUN useradd --create-home app && mkdir -p /app/data && chown app:app /app/data

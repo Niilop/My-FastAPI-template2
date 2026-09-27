@@ -8,6 +8,8 @@ services:
     env_file: .env
     environment:
       DATA_DIR: /app/data
+      # Backend ports are loopback-only; the frontend overwrites forwarded headers.
+      FORWARDED_ALLOW_IPS: "*"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -25,9 +27,10 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
     ports:
-      - "127.0.0.1:8501:8501"
+      - "127.0.0.1:5173:8080"
     environment:
-      API_URL: http://backend:8000
+      API_UPSTREAM: http://backend:8000
+      CLIENT_MAX_BODY_SIZE: ${CLIENT_MAX_BODY_SIZE:-11m}
     depends_on:
       backend:
         condition: service_healthy

@@ -1,14 +1,12 @@
-FROM python:3.12-slim
-COPY --from=ghcr.io/astral-sh/uv:0.12.11 /uv /uvx /bin/
+FROM node:24-alpine AS build
 WORKDIR /app
-ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
-COPY pyproject.toml uv.lock ./
-COPY backend/pyproject.toml backend/pyproject.toml
-COPY frontend/pyproject.toml frontend/pyproject.toml
-RUN uv sync --locked --no-dev --package frontend
-COPY frontend frontend
-RUN useradd --create-home app
-USER app
-ENV PATH="/app/.venv/bin:$PATH"
-EXPOSE 8501
-CMD ["streamlit", "run", "frontend/app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend ./
+RUN npm run build
+
+FROM nginxinc/nginx-unprivileged:1.28-alpine
+ENV API_UPSTREAM=http://backend:8000 CLIENT_MAX_BODY_SIZE=11m
+COPY frontend/nginx.conf.template /etc/nginx/templates/default.conf.template
+COPY --from=build /app/dist /usr/share/nginx/html
+EXPOSE 8080

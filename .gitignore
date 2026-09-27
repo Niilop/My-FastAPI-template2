@@ -26,3 +26,10 @@ app.db
 htmlcov/
 data/uploads/
 *.db
+
+# Frontend
+node_modules/
+frontend/dist/
+frontend/playwright-report/
+frontend/test-results/
+*.tsbuildinfo
